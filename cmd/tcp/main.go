@@ -18,17 +18,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
 	core_logger "tcp_srv/internal/core/logger"
 	"tcp_srv/internal/features/handlers/tcp"
 	"tcp_srv/internal/features/services"
+	"time"
 
 	"go.uber.org/zap"
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

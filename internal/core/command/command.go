@@ -18,7 +18,10 @@ func (c CommandHandler) Execute(client *core_domain.Client, args []string) error
 	if len(args) < c.MinArgs {
 		return fmt.Errorf("Usage: %s", c.Usage)
 	}
-	return c.Handler(client, args)
+	if err := c.Handler(client, args); err != nil {
+		return fmt.Errorf("Error execute command: %s: %v", args, err)
+	}
+	return nil
 }
 
 type Manager struct {
