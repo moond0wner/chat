@@ -47,15 +47,38 @@ func (s *Server) registerCommands() {
 				return s.roomService.JoinRoom(client, args[0])
 			},
 		},
-		// {
-		// 	Name:        "/info",
-		// 	Description: "Информация о сервере: комнаты и пользователи в ней",
-		// 	Usage:       "/info",
-		// 	MinArgs:     0,
-		// 	Handler: func(client *core_domain.Client, args []string) error {
-		// 		return s.roomService.GetClients(args[0])
-		// 	},
-		// },
+		{
+			Name:        "/all_info",
+			Description: "Информация о сервере: комнаты и пользователи в ней",
+			Usage:       "/all_info",
+			MinArgs:     0,
+			Handler: func(client *core_domain.Client, args []string) error {
+				text, err := s.roomService.GetAllInfo(client.ID)
+				if err != nil {
+					return fmt.Errorf("Error get all info about server: %v", err)
+				}
+				if err := s.SendMessageToUser(client, text); err != nil {
+					return fmt.Errorf("Error send message to user: %v", err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:        "/info",
+			Description: "Информация о канале: пользователи в нем",
+			Usage:       "/info",
+			MinArgs:     0,
+			Handler: func(client *core_domain.Client, args []string) error {
+				text, err := s.roomService.GetInfoAboutRoom(client.ID, client.RoomID)
+				if err != nil {
+					return fmt.Errorf("Error get info about room: %v", err)
+				}
+				if err := s.SendMessageToUser(client, text); err != nil {
+					return fmt.Errorf("Error send message to user: %v", err)
+				}
+				return nil
+			},
+		},
 		{
 			Name:        "/nick",
 			Description: "Сменить никнейм",
@@ -74,6 +97,33 @@ func (s *Server) registerCommands() {
 				return s.roomService.LeaveRoom(client)
 			},
 		},
+		{
+			Name:        "/msg",
+			Description: "Отправить личное сообщение пользователю",
+			Usage:       "/msg <user_name> <text>",
+			MinArgs:     2,
+			Handler: func(client *core_domain.Client, args []string) error {
+				message := core_domain.PrivateMessage{
+					SenderName:    client.Name,
+					RecipientName: args[0],
+					Text:          args[1],
+				}
+				return s.clientService.SendPrivateMessage(message)
+			},
+		},
+		{
+			Name:        "/reg",
+			Description: "Зарегистрировать ник",
+			Usage:       "/reg <nickname>",
+			MinArgs:     1,
+			Handler: func(client *core_domain.Client, args []string) error {
+				newName := args[0]
+				if err := s.clientService.ChangeNick(client.ID, newName); err != nil {
+					return err
+				}
+				return s.roomService.JoinRoom(client, "general")
+			},
+		},
 	})
 }
 
@@ -84,6 +134,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("Error listening: %v", err)
 	}
 
+	s.roomService.CreateRoom("register")
 	s.roomService.CreateRoom("general")
 	s.log.Info("Server started on :8080")
 
@@ -114,15 +165,11 @@ func (s *Server) Start(ctx context.Context) error {
 				}
 				continue
 			}
-			go s.HandleClient(conn, ctx)
+			go s.RegisterInServer(ctx, conn)
 		}
 	}()
 
 	select {
-	case err := <-errCh:
-		if err != nil {
-			return fmt.Errorf("listen TCP server: %w", err)
-		}
 	case <-ctx.Done():
 		s.log.Warn("Остановка TCP сервера...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -131,15 +178,16 @@ func (s *Server) Start(ctx context.Context) error {
 			return fmt.Errorf("Остановка TCP сервера: %w", err)
 		}
 		s.log.Warn("TCP сервер остановлен!")
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("listen TCP server: %w", err)
+		}
 	}
 	return nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Warn("Остановка сервера...")
-
-	s.mtx.Lock()
-
 	if s.listener != nil {
 		s.log.Debug("Закрываем listener")
 		if err := s.listener.Close(); err != nil {
@@ -156,7 +204,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			fmt.Fprintf(client.Conn, "Сервер останавливается...\n")
 		}
 	}
-	time.Sleep(100 * time.Millisecond)
 
 	for _, client := range clients {
 		if client.Conn != nil {
@@ -164,7 +211,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			s.log.Debug("Закрыто соединение клиента", zap.String("client", client.ID))
 		}
 	}
-	s.mtx.Unlock()
 
 	done := make(chan struct{})
 	go func() {
@@ -187,4 +233,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.mtx.Unlock()
 		return ctx.Err()
 	}
+}
+
+func (s *Server) SendMessageToUser(client *core_domain.Client, text string) error {
+	if _, err := fmt.Fprintln(client.Conn, text); err != nil {
+		s.log.Warn("Ошибка отправки сообщения",
+			zap.String("client_id", client.ID),
+			zap.Error(err))
+		return fmt.Errorf("Ошибка отправки сообщения: %v", err)
+	}
+	return nil
 }

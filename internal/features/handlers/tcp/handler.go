@@ -8,23 +8,34 @@ import (
 	"io"
 	"net"
 	"strings"
+	core_domain "tcp_srv/internal/core/domain"
 
 	"go.uber.org/zap"
 )
 
-func (s *Server) HandleClient(conn net.Conn, ctx context.Context) {
+func (s *Server) RegisterInServer(ctx context.Context, conn net.Conn) {
+	s.handleConnection(ctx, conn, "register", "Подключение к регистрации. Введите /reg <ник> для регистрации")
+}
+
+func (s *Server) HandleClient(ctx context.Context, conn net.Conn) {
+	s.handleConnection(ctx, conn, "general", "Подключение к комнате: general")
+}
+
+func (s *Server) handleConnection(ctx context.Context, conn net.Conn, roomName, welcomeMessage string) {
 	s.wg.Add(1)
 	defer s.wg.Done()
 
 	client := s.clientService.RegisterClient(conn)
 
-	if err := s.roomService.JoinRoom(client, "general"); err != nil {
-		s.log.Error("Ошибка подключения к general", zap.Error(err))
+	if err := s.roomService.JoinRoom(client, roomName); err != nil {
+		s.log.Error("Ошибка подключения к комнате",
+			zap.String("room", roomName),
+			zap.Error(err))
 		conn.Close()
 		return
 	}
 
-	if _, err := fmt.Fprintf(client.Conn, "Подключение к комнате: %s\n", client.RoomID); err != nil {
+	if _, err := fmt.Fprintf(client.Conn, "%s\n", welcomeMessage); err != nil {
 		s.log.Warn("Ошибка отправки приветствия",
 			zap.String("client_id", client.ID),
 			zap.Error(err))
@@ -35,13 +46,13 @@ func (s *Server) HandleClient(conn net.Conn, ctx context.Context) {
 		zap.String("room", client.RoomID))
 
 	defer func() {
-		s.clientService.UnregisterClient(client.ID)
 
-		if err := s.roomService.Broadcast(
-			client.RoomID,
-			fmt.Sprintf("%s покинул комнату\n", client.Name),
-			client.ID,
-		); err != nil {
+		msg := core_domain.Message{
+			RoomID:   client.RoomID,
+			SenderID: client.ID,
+			Text:     fmt.Sprintf("%s покинул комнату\n", client.Name),
+		}
+		if err := s.roomService.Broadcast(ctx, msg); err != nil {
 			s.log.Error("Ошибка отправки уведомления о выходе",
 				zap.String("room", client.RoomID),
 				zap.Error(err))
@@ -50,7 +61,7 @@ func (s *Server) HandleClient(conn net.Conn, ctx context.Context) {
 		s.clientService.UnregisterClient(client.ID)
 
 		conn.Close()
-		s.log.Debug("Клиент отключился", zap.String("client_id", client.ID))
+		s.log.Debug("Клиент отключился", zap.String("client_id", client.ID), zap.String("client_name", client.Name))
 	}()
 
 	reader := bufio.NewReader(conn)
@@ -83,6 +94,12 @@ func (s *Server) HandleClient(conn net.Conn, ctx context.Context) {
 			continue
 		}
 
+		if client.RoomID == "register" && strings.HasPrefix(msg, "/") {
+		} else if client.RoomID == "register" {
+			fmt.Fprintln(client.Conn, "Сначала зарегистрируйтесь: /reg <ник>")
+			continue
+		}
+
 		if strings.HasPrefix(msg, "/") {
 			if err := s.Manager.Execute(msg, client); err != nil {
 				fmt.Fprintf(client.Conn, "Error: %s\n", err.Error())
@@ -100,7 +117,12 @@ func (s *Server) HandleClient(conn net.Conn, ctx context.Context) {
 			zap.String("sender", client.Name),
 			zap.String("message", msg))
 
-		if err := s.roomService.Broadcast(client.RoomID, formattedMsg, client.ID); err != nil {
+		broadcastMsg := core_domain.Message{
+			RoomID:   client.RoomID,
+			SenderID: client.ID,
+			Text:     formattedMsg,
+		}
+		if err := s.roomService.Broadcast(ctx, broadcastMsg); err != nil {
 			s.log.Error("Ошибка отправки сообщения в комнату",
 				zap.String("room", client.RoomID),
 				zap.Error(err))
