@@ -1,7 +1,5 @@
 # tcp_server
 
-# tcp_server
-
 Сырая версия TCP-чата на Go.
 
 сервер: `make run`
