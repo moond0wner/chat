@@ -1,0 +1,52 @@
+services:
+  tcp:
+      build:
+        context: ${PROJECT_ROOT}
+        dockerfile: ${PROJECT_ROOT}/cmd/tcp/Dockerfile
+      container_name: tcp
+      environment:
+        - POSTGRES_HOST=postgres
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        - POSTGRES_DB=${POSTGRES_DB}
+        - POSTGRES_TIMEOUT=${POSTGRES_TIMEOUT}
+        - LOGGER_LEVEL=${LOGGER_LEVEL}
+        - LOGGER_FOLDER=/app/out/logs
+      volumes:
+        - ${PROJECT_ROOT}/out/logs:/app/out/logs
+      ports:
+        - "8080:8080"
+      restart: always
+  postgres:
+    image: postgres:18.1-bookworm
+    container_name: env-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - ${PROJECT_ROOT}/out/pgdata:/var/lib/postgresql
+    restart: always
+  postgres-migrate:
+    image: migrate/migrate:v4.19.1
+    volumes:
+      - ${PROJECT_ROOT}/migrations:/migrations
+  redis:
+    image: redis:8.6.1
+    container_name: env-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - ${PROJECT_ROOT}/out/redis_data:/data
+    restart: always
+  port-forwarder:
+    image: alpine/socat:1.8.0.3
+    container_name: env-port-forwarder
+    entrypoint: |
+      /bin/sh -c "
+        socat -d -d tcp-listen:5432,fork,reuseaddr tcp-connect:postgres:5432 &
+        socat -d -d tcp-listen:6379,fork,reuseaddr tcp-connect:redis:6379 &
+        wait
+      "
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:6379:6379"

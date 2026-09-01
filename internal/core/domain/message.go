@@ -1,18 +1,21 @@
 package core_domain
 
+import "time"
+
 type Message struct {
-	RoomID     string
+	RoomID     int
 	SenderName string
-	SenderID   string
+	SenderID   int
 	Text       string
-	// sendAt time.Time - на будущее для хранения в БД
+	IsSystem   bool
+	SendAt     time.Time
 }
 
 type PrivateMessage struct {
-	SenderID      string
+	SenderID      int
 	SenderName    string
-	RecipentID    string
+	RecipentID    int
 	RecipientName string
 	Text          string
-	// sendAt time.Time - на будущее для хранения в БД
+	SendAt        time.Time
 }
