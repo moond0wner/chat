@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	core_command "tcp_srv/internal/core/command"
+	core_config "tcp_srv/internal/core/config"
 	core_domain "tcp_srv/internal/core/domain"
 	core_logger "tcp_srv/internal/core/logger"
 	"tcp_srv/internal/features/services"
@@ -20,16 +21,18 @@ type Server struct {
 	clientService *services.ClientService
 	Manager       *core_command.Manager
 	log           *core_logger.Logger
+	config        *core_config.Config
 	mtx           sync.RWMutex
 	wg            sync.WaitGroup
 	listener      net.Listener
 }
 
-func NewServer(logger *core_logger.Logger, rs *services.RoomService, cs *services.ClientService) *Server {
+func NewServer(logger *core_logger.Logger, rs *services.RoomService, cs *services.ClientService, cfg *core_config.Config) *Server {
 	srv := &Server{
 		roomService:   rs,
 		clientService: cs,
 		Manager:       core_command.NewManager(),
+		config:        cfg,
 		log:           logger,
 	}
 	srv.registerCommands()
@@ -44,7 +47,13 @@ func (s *Server) registerCommands() {
 			Usage:       "/join <room_name>",
 			MinArgs:     1,
 			Handler: func(client *core_domain.Client, args []string) error {
-				return s.roomService.JoinRoom(client, args[0])
+				if args[0] == "register" {
+					return nil
+				}
+				if client.RoomID == s.roomService.RegisterRoomID {
+					return nil
+				}
+				return s.roomService.JoinRoom(context.Background(), client, args[0])
 			},
 		},
 		{
@@ -69,7 +78,11 @@ func (s *Server) registerCommands() {
 			Usage:       "/info",
 			MinArgs:     0,
 			Handler: func(client *core_domain.Client, args []string) error {
-				text, err := s.roomService.GetInfoAboutRoom(client.ID, client.RoomID)
+				room, err := s.roomService.GetRoomByID(context.Background(), client.RoomID)
+				if err != nil {
+					return fmt.Errorf("Error get room by id: %v", err)
+				}
+				text, err := s.roomService.GetInfoAboutRoom(client.ID, room.Name)
 				if err != nil {
 					return fmt.Errorf("Error get info about room: %v", err)
 				}
@@ -85,7 +98,10 @@ func (s *Server) registerCommands() {
 			Usage:       "/nick <new_name>",
 			MinArgs:     1,
 			Handler: func(client *core_domain.Client, args []string) error {
-				return s.clientService.ChangeNick(client.ID, args[0])
+				if client.RoomID == s.roomService.RegisterRoomID {
+					return nil
+				}
+				return s.clientService.ChangeNick(context.Background(), client.ID, args[0])
 			},
 		},
 		{
@@ -94,7 +110,7 @@ func (s *Server) registerCommands() {
 			Usage:       "/leave",
 			MinArgs:     0,
 			Handler: func(client *core_domain.Client, args []string) error {
-				return s.roomService.LeaveRoom(client)
+				return s.roomService.LeaveRoom(context.Background(), client)
 			},
 		},
 		{
@@ -103,6 +119,9 @@ func (s *Server) registerCommands() {
 			Usage:       "/msg <user_name> <text>",
 			MinArgs:     2,
 			Handler: func(client *core_domain.Client, args []string) error {
+				if client.RoomID == s.roomService.RegisterRoomID {
+					return nil
+				}
 				message := core_domain.PrivateMessage{
 					SenderName:    client.Name,
 					RecipientName: args[0],
@@ -118,10 +137,10 @@ func (s *Server) registerCommands() {
 			MinArgs:     1,
 			Handler: func(client *core_domain.Client, args []string) error {
 				newName := args[0]
-				if err := s.clientService.ChangeNick(client.ID, newName); err != nil {
+				if err := s.clientService.ChangeNick(context.Background(), client.ID, newName); err != nil {
 					return err
 				}
-				return s.roomService.JoinRoom(client, "general")
+				return s.roomService.JoinRoom(context.Background(), client, "general")
 			},
 		},
 	})
@@ -129,14 +148,11 @@ func (s *Server) registerCommands() {
 
 func (s *Server) Start(ctx context.Context) error {
 	var err error
-	s.listener, err = net.Listen("tcp", ":8080")
+	s.listener, err = net.Listen("tcp", s.config.ServerPort)
 	if err != nil {
 		return fmt.Errorf("Error listening: %v", err)
 	}
-
-	s.roomService.CreateRoom("register")
-	s.roomService.CreateRoom("general")
-	s.log.Info("Server started on :8080")
+	s.log.Info("Server started", zap.String("port", s.config.ServerPort))
 
 	errCh := make(chan error, 1)
 
@@ -208,7 +224,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	for _, client := range clients {
 		if client.Conn != nil {
 			client.Conn.Close()
-			s.log.Debug("Закрыто соединение клиента", zap.String("client", client.ID))
+			s.log.Debug("Закрыто соединение клиента", zap.Int("client", client.ID))
 		}
 	}
 
@@ -238,7 +254,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) SendMessageToUser(client *core_domain.Client, text string) error {
 	if _, err := fmt.Fprintln(client.Conn, text); err != nil {
 		s.log.Warn("Ошибка отправки сообщения",
-			zap.String("client_id", client.ID),
+			zap.Int("client_id", client.ID),
 			zap.Error(err))
 		return fmt.Errorf("Ошибка отправки сообщения: %v", err)
 	}
