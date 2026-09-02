@@ -4,7 +4,7 @@
 
 Алгоритм запуска:
 Сервер:
-0. Предварительно создать базу данных postgres, внести данные в .env, создать таблицы через миграции (make migrate-create seq=init)
+Предварительно создать базу данных postgres, внести данные в .env, создать таблицы через миграции (make migrate-create seq=init)
 1. make env-up
 2. make env-port-forward
 3. make migrate-up
