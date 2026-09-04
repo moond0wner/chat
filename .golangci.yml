@@ -1,0 +1,144 @@
+run:
+  timeout: 5m
+  tests: false
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+  go: '1.26'
+
+linters:
+  enable:
+    # Базовые (стандартные)
+    - govet
+    - staticcheck
+    - unused
+    - errcheck
+    - ineffassign
+    - gosimple
+    - gofmt
+
+    # Дополнительные (полезные)
+    - misspell
+    - revive
+    - gocyclo
+    - godot
+    - goimports
+    - nakedret
+    - unconvert
+    - gocognit
+
+    # Новые полезные линтеры
+    - copyloopvar
+    - intrange
+    - sloglint
+    - perfsprint
+    - gocheckcompilerdirectives
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+    settings:
+      shadow:
+        strict: true
+
+  gocyclo:
+    min-complexity: 15
+
+  revive:
+    severity: warning
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+      - name: blank-imports
+        severity: warning
+      - name: context-as-argument
+        severity: warning
+      - name: error-return
+        severity: warning
+      - name: error-naming
+        severity: warning
+      - name: error-strings
+        severity: warning
+      - name: receiver-naming
+        severity: warning
+      - name: time-naming
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: unexported-return
+        severity: warning
+      - name: deep-exit
+        severity: warning
+      - name: confusing-naming
+        severity: warning
+      - name: confusing-results
+        severity: warning
+      - name: defer
+        severity: warning
+      - name: early-return
+        severity: warning
+      - name: empty-block
+        severity: warning
+      - name: max-public-structs
+        severity: warning
+        arguments: [5]
+
+  gocognit:
+    min-complexity: 20
+
+  misspell:
+    locale: US
+
+  godot:
+    scope: all
+
+  goimports:
+    local-prefixes: github.com/moond0wner/tcp-server
+
+  nakedret:
+    max-func-lines: 30
+
+  perfsprint:
+    int-conversion: true
+    err-error: true
+    errorf: true
+    sprintf1: true
+
+  sloglint:
+    no-mixed-args: true
+    key-naming-case: snake
+
+issues:
+  exclude-dirs:
+    - vendor
+    - .git
+    - out
+    - migrations
+    - tmp
+  uniq-by-line: true
+  max-issues-per-linter: 50
+  max-same-issues: 5
+
+output:
+  formats: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true
+
+severity:
+  default-severity: error
+  rules:
+    - linters:
+        - gocyclo
+        - gocognit
+      severity: warning
+    - linters:
+        - godot
+        - misspell
+      severity: info

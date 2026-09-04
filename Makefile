@@ -86,3 +86,6 @@ run:
 	sudo chmod -R 777 ${PROJECT_ROOT}/out/pgdata && \
 	go mod tidy && \
 	go run cmd/tcp/main.go
+
+go-lint:
+	@~/go/bin/golangci-lint run --config=.golangci.yml ./...

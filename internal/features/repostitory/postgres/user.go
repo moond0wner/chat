@@ -81,7 +81,7 @@ func (r *HistoryRepository) GetAllUsers(ctx context.Context) (*[]core_domain.Cli
 	clients := make([]core_domain.Client, 0)
 	for rows.Next() {
 		var client core_domain.Client
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&client.ID,
 			&client.Name,
 			&client.RoomID,
@@ -90,7 +90,7 @@ func (r *HistoryRepository) GetAllUsers(ctx context.Context) (*[]core_domain.Cli
 		}
 		clients = append(clients, client)
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("next rows: %w", err)
 	}
 	return &clients, nil

@@ -69,7 +69,7 @@ func (r *HistoryRepository) GetAllRooms(ctx context.Context) (*[]core_domain.Roo
 	rooms := make([]core_domain.Room, 0)
 	for rows.Next() {
 		var room core_domain.Room
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&room.ID,
 			&room.Name,
 		); err != nil {
@@ -77,7 +77,7 @@ func (r *HistoryRepository) GetAllRooms(ctx context.Context) (*[]core_domain.Roo
 		}
 		rooms = append(rooms, room)
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("next rows: %w", err)
 	}
 	return &rooms, nil

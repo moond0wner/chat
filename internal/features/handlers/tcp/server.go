@@ -10,15 +10,16 @@ import (
 	core_config "tcp_srv/internal/core/config"
 	core_domain "tcp_srv/internal/core/domain"
 	core_logger "tcp_srv/internal/core/logger"
-	"tcp_srv/internal/features/services"
+	client_service "tcp_srv/internal/features/services/client"
+	room_service "tcp_srv/internal/features/services/room"
 	"time"
 
 	"go.uber.org/zap"
 )
 
 type Server struct {
-	roomService   *services.RoomService
-	clientService *services.ClientService
+	roomService   *room_service.RoomService
+	clientService *client_service.ClientService
 	Manager       *core_command.Manager
 	log           *core_logger.Logger
 	config        *core_config.Config
@@ -27,7 +28,7 @@ type Server struct {
 	listener      net.Listener
 }
 
-func NewServer(logger *core_logger.Logger, rs *services.RoomService, cs *services.ClientService, cfg *core_config.Config) *Server {
+func NewServer(logger *core_logger.Logger, rs *room_service.RoomService, cs *client_service.ClientService, cfg *core_config.Config) *Server {
 	srv := &Server{
 		roomService:   rs,
 		clientService: cs,
@@ -48,10 +49,10 @@ func (s *Server) registerCommands() {
 			MinArgs:     1,
 			Handler: func(client *core_domain.Client, args []string) error {
 				if args[0] == "register" {
-					return nil
+					return errors.New("already registered. Use /join to join another room")
 				}
 				if client.RoomID == s.roomService.RegisterRoomID {
-					return nil
+					return errors.New("please register first using /reg <nickname>")
 				}
 				return s.roomService.JoinRoom(context.Background(), client, args[0])
 			},
@@ -66,7 +67,7 @@ func (s *Server) registerCommands() {
 				if err != nil {
 					return fmt.Errorf("Error get all info about server: %v", err)
 				}
-				if err := s.SendMessageToUser(client, text); err != nil {
+				if err = s.SendMessageToUser(client, text); err != nil {
 					return fmt.Errorf("Error send message to user: %v", err)
 				}
 				return nil
@@ -86,7 +87,7 @@ func (s *Server) registerCommands() {
 				if err != nil {
 					return fmt.Errorf("Error get info about room: %v", err)
 				}
-				if err := s.SendMessageToUser(client, text); err != nil {
+				if err = s.SendMessageToUser(client, text); err != nil {
 					return fmt.Errorf("Error send message to user: %v", err)
 				}
 				return nil
@@ -99,9 +100,9 @@ func (s *Server) registerCommands() {
 			MinArgs:     1,
 			Handler: func(client *core_domain.Client, args []string) error {
 				if client.RoomID == s.roomService.RegisterRoomID {
-					return nil
+					return errors.New("registration required")
 				}
-				return s.clientService.ChangeNick(context.Background(), client.ID, args[0])
+				return s.clientService.ChangeNick(context.Background(), client, args[0])
 			},
 		},
 		{
@@ -120,14 +121,14 @@ func (s *Server) registerCommands() {
 			MinArgs:     2,
 			Handler: func(client *core_domain.Client, args []string) error {
 				if client.RoomID == s.roomService.RegisterRoomID {
-					return nil
+					return errors.New("registration required")
 				}
 				message := core_domain.PrivateMessage{
 					SenderName:    client.Name,
 					RecipientName: args[0],
 					Text:          args[1],
 				}
-				return s.clientService.SendPrivateMessage(message)
+				return s.clientService.SendPrivateMessage(message, client)
 			},
 		},
 		{
@@ -137,7 +138,7 @@ func (s *Server) registerCommands() {
 			MinArgs:     1,
 			Handler: func(client *core_domain.Client, args []string) error {
 				newName := args[0]
-				if err := s.clientService.ChangeNick(context.Background(), client.ID, newName); err != nil {
+				if err := s.clientService.ChangeNick(context.Background(), client, newName); err != nil {
 					return err
 				}
 				return s.roomService.JoinRoom(context.Background(), client, "general")
@@ -150,55 +151,83 @@ func (s *Server) Start(ctx context.Context) error {
 	var err error
 	s.listener, err = net.Listen("tcp", s.config.ServerPort)
 	if err != nil {
-		return fmt.Errorf("Error listening: %v", err)
+		return fmt.Errorf("error listening: %w", err)
 	}
 	s.log.Info("Server started", zap.String("port", s.config.ServerPort))
 
 	errCh := make(chan error, 1)
+	done := make(chan struct{})
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		defer close(done)
+
 		for {
 			select {
 			case <-ctx.Done():
-				s.log.Debug("Прекращаем принимать соединения")
+				s.log.Debug("Stopping accepting connections")
 				return
 			default:
 			}
 
-			conn, err := s.listener.Accept()
+			var conn net.Conn
+			conn, err = s.listener.Accept()
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+
 				select {
 				case <-ctx.Done():
 					return
 				default:
-					s.log.Error("Error accepting conn", zap.Error(err))
-					select {
-					case errCh <- err:
-					default:
-					}
 				}
+
+				s.log.Error("Error accepting connection", zap.Error(err))
+
+				select {
+				case errCh <- fmt.Errorf("accept error: %w", err):
+				default:
+					s.log.Warn("Error channel full, dropping error")
+				}
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
+
 			go s.RegisterInServer(ctx, conn)
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
-		s.log.Warn("Остановка TCP сервера...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := s.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("Остановка TCP сервера: %w", err)
-		}
-		s.log.Warn("TCP сервер остановлен!")
-	case err := <-errCh:
+		s.log.Warn("Shutting down TCP server...")
+		return s.gracefulShutdown()
+	case err = <-errCh:
 		if err != nil {
-			return fmt.Errorf("listen TCP server: %w", err)
+			s.log.Error("Server error", zap.Error(err))
+			if shutdownErr := s.gracefulShutdown(); shutdownErr != nil {
+				return fmt.Errorf("server error: %w, shutdown error: %v", err, shutdownErr)
+			}
+			return fmt.Errorf("server error: %w", err)
 		}
+		return nil
+	case <-done:
+		return nil
 	}
+}
+
+func (s *Server) gracefulShutdown() error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := s.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("shutdown TCP server: %w", err)
+	}
+
+	s.wg.Wait()
+
+	s.log.Warn("TCP server stopped")
 	return nil
 }
 
