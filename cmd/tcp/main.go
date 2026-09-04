@@ -1,15 +1,14 @@
 package main
 
 // Планы на следующее обновление:
-// 1) Фикс истории сообщений (логи не должны попадать в бд)
-// 2) WebSocket
-// 3) HTML+JS
+// 1) Перелопатить весь код, убрать всё лишнее, ну и линтер добавить еще
+// 2) Фикс истории сообщений (логи не должны попадать в бд)
+// 3) WebSocket
+// 4) HTML+JS
 
-// Какой то пиздец, не переключаться на мэйн и не пуллить
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,14 +17,16 @@ import (
 	core_pgx_pool "tcp_srv/internal/core/repository/postgres/pool/pgx"
 	"tcp_srv/internal/features/handlers/tcp"
 	history_postgres_repository "tcp_srv/internal/features/repostitory/postgres"
-	"tcp_srv/internal/features/services"
+	client_service "tcp_srv/internal/features/services/client"
+	room_service "tcp_srv/internal/features/services/room"
 	"time"
 
 	"go.uber.org/zap"
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	var err error
+
 	cfg := core_config.NewConfigMust()
 	time.Local = cfg.TimeZone
 
@@ -43,7 +44,7 @@ func main() {
 
 	logger.Debug("initializing postgres connection pool")
 
-	postgres_pool, err := core_pgx_pool.NewPool(
+	postgresPool, err := core_pgx_pool.NewPool(
 		ctx,
 		core_pgx_pool.NewConfigMust(),
 	)
@@ -51,32 +52,32 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to init postgres connection pool", zap.Error(err))
 	}
-	defer postgres_pool.Close()
+	defer postgresPool.Close()
 
-	historyRepository := history_postgres_repository.NewHistoryRepository(postgres_pool)
-	roomService := services.NewRoomService(logger, historyRepository)
-	clientService := services.NewClientService(logger, historyRepository)
+	historyRepository := history_postgres_repository.NewHistoryRepository(postgresPool)
+	roomService := room_service.NewRoomService(logger, historyRepository)
+	clientService := client_service.NewClientService(logger, historyRepository)
 
-	if err := roomService.LoadAllRooms(ctx); err != nil {
+	if err = roomService.LoadAllRooms(ctx); err != nil {
 		logger.Fatal("Ошибка загрузки комнат", zap.Error(err))
 	}
-	if err := clientService.LoadAllUsers(ctx); err != nil {
+	if err = clientService.LoadAllUsers(ctx); err != nil {
 		logger.Fatal("Ошибка загрузки пользователей", zap.Error(err))
 	}
 
-	if err := roomService.CreateRoom(ctx, "register"); err != nil {
+	if err = roomService.CreateRoom(ctx, "register"); err != nil {
 		logger.Warn("Ошибка создания комнаты register", zap.Error(err))
 	}
-	if err := roomService.CreateRoom(ctx, "general"); err != nil {
+	if err = roomService.CreateRoom(ctx, "general"); err != nil {
 		logger.Warn("Ошибка создания комнаты general", zap.Error(err))
 	}
 
-	if err := roomService.InitSystemRooms(ctx); err != nil {
+	if err = roomService.InitSystemRooms(ctx); err != nil {
 		logger.Warn("Ошибка инициализации ID системных комнат", zap.Error(err))
 	}
 
 	srv := tcp.NewServer(logger, roomService, clientService, cfg)
-	if err := srv.Start(ctx); err != nil {
+	if err = srv.Start(ctx); err != nil {
 		logger.Error("Error starting server:", zap.Error(err))
 	}
 }

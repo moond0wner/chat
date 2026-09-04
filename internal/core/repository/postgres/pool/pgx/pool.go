@@ -32,7 +32,7 @@ func NewPool(ctx context.Context, config Config) (*Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create pgxpool: %w", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
+	if err = pool.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("pgxpool ping: %w", err)
 	}
 	return &Pool{

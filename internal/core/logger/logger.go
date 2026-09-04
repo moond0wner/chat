@@ -16,8 +16,6 @@ import (
 // 	key = loggerContextKey{}
 // )
 
-// TODO: add Logger interface :)
-
 type Logger struct {
 	*zap.Logger
 
