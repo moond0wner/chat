@@ -2,10 +2,12 @@ package room_service
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+
 	"time"
 
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 	"go.uber.org/zap"
 )
 
@@ -21,11 +23,19 @@ func (rs *RoomService) Broadcast(ctx context.Context, message core_domain.Messag
 
 	room, ok := rs.rooms[message.RoomID]
 	if !ok {
-		return fmt.Errorf("room '%d' not found", message.RoomID)
+		rs.log.Warn("Room not found for broadcast",
+			zap.Int("room_id", message.RoomID),
+			zap.Int("sender_id", message.SenderID),
+		)
+		return errors.New("Комната не найдена")
 	}
 	if !message.IsSystem {
-		if err := rs.historyRepository.SaveMessage(ctx, &message); err != nil {
-			return fmt.Errorf("db error: %w", err)
+		if err := rs.historyRepository.SaveMessage(ctx, message); err != nil {
+			rs.log.Warn("Error save message in DB",
+				zap.Int("room_id", message.RoomID),
+				zap.String("text", message.Text),
+				zap.Error(err),
+			)
 		}
 
 	}

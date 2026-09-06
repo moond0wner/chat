@@ -2,7 +2,7 @@ package client_service
 
 import (
 	"strings"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 )
 
 func (cs *ClientService) GetClientByID(id int) *core_domain.Client {

@@ -3,7 +3,7 @@ package room_service
 import (
 	"fmt"
 	"strings"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 
 	"go.uber.org/zap"
 )
@@ -34,9 +34,15 @@ func (rs *RoomService) GetAllInfo(clientID int) (string, error) {
 func (rs *RoomService) GetInfoAboutRoom(clientID int, roomName string) (string, error) {
 	clients, err := rs.GetClients(roomName)
 	if err != nil {
-		return "", fmt.Errorf("Error get info about room: %s: %v", roomName, err)
+		rs.log.Warn("Error get info about room",
+			zap.String("room_name", roomName),
+			zap.Error(err),
+		)
+		return "", fmt.Errorf("error get info about room: %w", err)
 	}
-
+	if len(rs.rooms) == 0 {
+		rs.log.Warn("GetAllInfo called with empty rooms list", zap.Int("client_id", clientID))
+	}
 	rs.mtx.RLock()
 	defer rs.mtx.RUnlock()
 	text := fmt.Sprintf("Информация о комнате '%s':\n", roomName)
@@ -61,7 +67,7 @@ func (rs *RoomService) GetClients(roomName string) ([]*core_domain.Client, error
 
 	room, ok := rs.rooms[roomID]
 	if !ok {
-		rs.log.Warn("Комната существует в индексе, но не в памяти", zap.Int("room_id", roomID), zap.String("room_name", roomName))
+		rs.log.Warn("Room exists in the index but not in memory", zap.Int("room_id", roomID), zap.String("room_name", roomName))
 		return nil, fmt.Errorf("комната '%s' существует в индексе, но не в памяти", roomName)
 	}
 
@@ -84,7 +90,7 @@ func (rs *RoomService) IsEmpty(roomName string) (bool, error) {
 
 	room, ok := rs.rooms[roomID]
 	if !ok {
-		rs.log.Warn("Комната существует в индексе, но не в памяти", zap.Int("room_id", roomID), zap.String("room_name", roomName))
+		rs.log.Warn("Room exists in the index but not in memory", zap.Int("room_id", roomID), zap.String("room_name", roomName))
 		return false, fmt.Errorf("комната '%s' существует в индексе, но не в памяти", roomName)
 	}
 

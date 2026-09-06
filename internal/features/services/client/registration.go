@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"net"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
+	core_transport "github.com/moond0wner/chat/internal/core/transport"
 
 	"go.uber.org/zap"
 )
 
-func (cs *ClientService) RegisterClient(ctx context.Context, conn net.Conn) *core_domain.Client {
+func (cs *ClientService) RegisterClient(ctx context.Context, conn core_transport.Conn) *core_domain.Client {
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 
@@ -20,13 +20,13 @@ func (cs *ClientService) RegisterClient(ctx context.Context, conn net.Conn) *cor
 	}
 
 	if err := cs.historyRepository.SaveUser(ctx, client); err != nil {
-		cs.log.Warn("Ошибка регистрации пользователя", zap.String("client_ip", conn.LocalAddr().String()), zap.Error(err))
+		cs.log.Warn("Error registration user", zap.String("client_ip", conn.LocalAddr().String()), zap.Error(err))
 		return nil
 	}
 
 	cs.clients[client.ID] = client
 	cs.nameMap[client.Name] = client
-	cs.log.Debug("Клиент зарегистрирован", zap.Int("client_id", client.ID), zap.String("client_name", client.Name))
+	cs.log.Debug("Client is registered", zap.Int("client_id", client.ID), zap.String("client_name", client.Name))
 	return client
 }
 
@@ -41,5 +41,5 @@ func (cs *ClientService) UnregisterClient(id int) {
 
 	delete(cs.nameMap, client.Name)
 	delete(cs.clients, client.ID)
-	cs.log.Debug("Клиент удален", zap.Int("client_id", id))
+	cs.log.Debug("Client deleted", zap.Int("client_id", id))
 }
