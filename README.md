@@ -1,22 +1,46 @@
-# tcp_server
+```markdown
+# Chat
 
-Сырая версия TCP-чата на Go.
+Многопользовательский чат с поддержкой TCP и WebSocket.
 
-Алгоритм запуска:
-Сервер:
-Предварительно создать базу данных postgres, внести данные в .env, создать таблицы через миграции (make migrate-create seq=init)
-1. make env-up
-2. make env-port-forward
-3. make migrate-up (если таблицы не мигрированы)
-4. make run
+## Быстрый старт
 
-Клиент: nc localhost 8080
+```bash
+cp .env.example .env
+make env-up
+make env-port-forward
+make migrate-up
+make app-run
+```
 
-функционал:
-- Подключение к комнате регистрации, регистрация с помощью `/reg`, затем подключение к основной комнате 'general'
-- Подключение к general и создание своих комнат (`/join`)
-- Выход из комнаты в general (`/leave`)
-- Приватное сообщение `/msg`
-- Полная информация `/all_info`
-- Информация по конкретной комнате `/info`
-- Смена ника (`/nick`)
+## Подключение
+
+```bash
+nc localhost 8080                  # TCP
+oткрыть web/index.html в браузере  # WebSocket
+```
+
+## Команды
+
+```
+/reg <ник>            регистрация
+/join <комната>       войти в комнату
+/leave                вернуться в general
+/nick <ник>           сменить ник
+/msg <ник> <текст>    личное сообщение
+/info                 участники в комнате
+/all_info             все комнаты
+```
+
+## Структура
+
+```
+core/          интерфейсы и модели
+features/      бизнес-логика и транспорт
+cmd/           точка входа
+```
+
+## Стек
+
+Go, PostgreSQL, gorilla/websocket, Docker
+```
