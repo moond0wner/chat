@@ -3,7 +3,7 @@ package room_service
 import (
 	"context"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 
 	"go.uber.org/zap"
 )
@@ -39,6 +39,6 @@ func (rs *RoomService) LoadAllRooms(ctx context.Context) error {
 		room.Clients = make(map[int]*core_domain.Client)
 	}
 
-	rs.log.Info("Загружены комнаты из БД", zap.Int("count", len(*rooms)))
+	rs.log.Info("Rooms loaded from DB", zap.Int("count", len(*rooms)))
 	return nil
 }

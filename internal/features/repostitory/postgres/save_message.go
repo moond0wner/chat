@@ -3,13 +3,14 @@ package history_postgres_repository
 import (
 	"context"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
 	"time"
+
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 )
 
 func (r *HistoryRepository) SaveMessage(
 	ctx context.Context,
-	message *core_domain.Message,
+	message core_domain.Message,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()

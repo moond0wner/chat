@@ -2,9 +2,9 @@ package client_service
 
 import (
 	"sync"
-	core_domain "tcp_srv/internal/core/domain"
-	core_logger "tcp_srv/internal/core/logger"
-	history_postgres_repository "tcp_srv/internal/features/repostitory/postgres"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
+	core_logger "github.com/moond0wner/chat/internal/core/logger"
+	history_postgres_repository "github.com/moond0wner/chat/internal/features/repostitory/postgres"
 )
 
 type ClientService struct {

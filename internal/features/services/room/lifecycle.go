@@ -3,7 +3,7 @@ package room_service
 import (
 	"context"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 
 	"go.uber.org/zap"
 )
@@ -20,7 +20,8 @@ func (rs *RoomService) CreateRoom(ctx context.Context, name string) error {
 	if err == nil {
 		room, err := rs.GetRoomByID(ctx, id)
 		if err != nil {
-			return fmt.Errorf("Error get room from db by id: %v", err)
+			rs.log.Warn("Error get room from DB by id", zap.Error(err))
+			return fmt.Errorf("Error get room from DB by id: %v", err)
 		}
 		rs.rooms[id] = room
 		rs.roomsByName[name] = id
@@ -28,7 +29,8 @@ func (rs *RoomService) CreateRoom(ctx context.Context, name string) error {
 	}
 	room := core_domain.NewRoom(name)
 	if err = rs.historyRepository.SaveRoom(ctx, room); err != nil {
-		return fmt.Errorf("Error save room: %v", err)
+		rs.log.Warn("Error save room", zap.Int("room_id", room.ID), zap.String("room_name", room.Name), zap.Error(err))
+		return fmt.Errorf("Error save room: %d: %v", room.ID, err)
 	}
 	rs.rooms[room.ID] = room
 	rs.roomsByName[room.Name] = room.ID
@@ -60,23 +62,26 @@ func (rs *RoomService) JoinRoom(ctx context.Context, client *core_domain.Client,
 				return fmt.Errorf("Error rollback failed: %v", err)
 			}
 		}
+		rs.log.Warn("Join room failed", zap.String("new_room_name", newRoomName), zap.Error(err))
 		return fmt.Errorf("join room failed: %v", err)
 	}
 
 	if needDelete {
 		rs.deleteRoom(oldRoom.ID)
-		rs.log.Warn("Удалена пустая комната", zap.String("room", oldRoom.Name), zap.Int("room_id", oldRoom.ID))
+		rs.log.Warn("Deleted empty rooms", zap.String("room", oldRoom.Name), zap.Int("room_id", oldRoom.ID))
 	}
 
 	if len(oldRoomClients) > 0 {
-		msg := fmt.Sprintf("%s покинул комнату\n", client.Name)
-		for _, c := range oldRoomClients {
-			fmt.Fprintln(c.Conn, msg)
+		if oldRoom.Name != "register" {
+			msg := fmt.Sprintf("%s покинул комнату\n", client.Name)
+			for _, c := range oldRoomClients {
+				fmt.Fprintln(c.Conn, msg)
+			}
+			fmt.Fprintf(client.Conn, "Вы покинули комнату: %s\n", oldRoom.Name)
+			rs.log.Info("Client left the room",
+				zap.String("client", client.Name),
+				zap.String("room", oldRoom.Name))
 		}
-		fmt.Fprintf(client.Conn, "Вы покинули комнату: %s\n", oldRoom.Name)
-		rs.log.Info("Клиент покинул комнату",
-			zap.String("client", client.Name),
-			zap.String("room", oldRoom.Name))
 	}
 
 	if len(newRoomClients) > 0 {
@@ -87,7 +92,7 @@ func (rs *RoomService) JoinRoom(ctx context.Context, client *core_domain.Client,
 	}
 
 	fmt.Fprintf(client.Conn, "Подключен к комнате: %s\n", newRoom.Name)
-	rs.log.Info("Клиент подключился к комнате",
+	rs.log.Info("Client connect in room",
 		zap.String("client", client.Name),
 		zap.String("room", newRoom.Name))
 
@@ -105,6 +110,7 @@ func (rs *RoomService) LeaveRoom(ctx context.Context, client *core_domain.Client
 	}
 
 	if err := rs.JoinRoom(ctx, client, "general"); err != nil {
+		rs.log.Warn("Error connect to room", zap.Int("client_id", client.RoomID), zap.String("room_name", "general"), zap.Error(err))
 		return fmt.Errorf("Ошибка подключения к комнате: %v", err)
 	}
 	return nil

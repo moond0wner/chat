@@ -3,7 +3,7 @@ package client_service
 import (
 	"context"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 
 	"go.uber.org/zap"
 )
@@ -28,6 +28,6 @@ func (cs *ClientService) LoadAllUsers(ctx context.Context) error {
 		cs.nameMap[user.Name] = client
 	}
 
-	cs.log.Info("Загружены пользователи из БД", zap.Int("count", len(*users)))
+	cs.log.Info("Users loaded from DB", zap.Int("count", len(*users)))
 	return nil
 }

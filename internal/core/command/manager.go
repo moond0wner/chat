@@ -1,9 +1,11 @@
 package core_command
 
 import (
+	"context"
 	"fmt"
 	"strings"
-	core_domain "tcp_srv/internal/core/domain"
+
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 )
 
 type CommandHandler struct {
@@ -11,14 +13,14 @@ type CommandHandler struct {
 	Description string
 	Usage       string
 	MinArgs     int
-	Handler     func(client *core_domain.Client, args []string) error
+	Handler     func(ctx context.Context, client *core_domain.Client, args []string) error
 }
 
-func (c CommandHandler) Execute(client *core_domain.Client, args []string) error {
+func (c CommandHandler) Execute(ctx context.Context, client *core_domain.Client, args []string) error {
 	if len(args) < c.MinArgs {
 		return fmt.Errorf("Usage: %s", c.Usage)
 	}
-	if err := c.Handler(client, args); err != nil {
+	if err := c.Handler(ctx, client, args); err != nil {
 		return fmt.Errorf("Error execute command: %s: %v", args, err)
 	}
 	return nil
@@ -53,7 +55,7 @@ func (m *Manager) List() []CommandHandler {
 	return cmds
 }
 
-func (m *Manager) Execute(input string, client *core_domain.Client) error {
+func (m *Manager) Execute(ctx context.Context, input string, client *core_domain.Client) error {
 	parts := strings.SplitN(input, " ", 2)
 	name := parts[0]
 	args := []string{}
@@ -66,5 +68,5 @@ func (m *Manager) Execute(input string, client *core_domain.Client) error {
 		return fmt.Errorf("unknown command: %s", name)
 	}
 
-	return cmd.Execute(client, args)
+	return cmd.Execute(ctx, client, args)
 }

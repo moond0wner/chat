@@ -3,7 +3,8 @@ package history_postgres_repository
 import (
 	"context"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
 )
 
 func (r *HistoryRepository) SaveRoom(ctx context.Context, room *core_domain.Room) error {

@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	core_command "tcp_srv/internal/core/command"
-	core_config "tcp_srv/internal/core/config"
-	core_domain "tcp_srv/internal/core/domain"
-	core_logger "tcp_srv/internal/core/logger"
-	client_service "tcp_srv/internal/features/services/client"
-	room_service "tcp_srv/internal/features/services/room"
+
 	"time"
 
+	core_command "github.com/moond0wner/chat/internal/core/command"
+	core_config "github.com/moond0wner/chat/internal/core/config"
+	core_logger "github.com/moond0wner/chat/internal/core/logger"
+	client_service "github.com/moond0wner/chat/internal/features/services/client"
+	room_service "github.com/moond0wner/chat/internal/features/services/room"
 	"go.uber.org/zap"
 )
 
@@ -28,123 +28,21 @@ type Server struct {
 	listener      net.Listener
 }
 
-func NewServer(logger *core_logger.Logger, rs *room_service.RoomService, cs *client_service.ClientService, cfg *core_config.Config) *Server {
+func NewServer(
+	logger *core_logger.Logger,
+	rs *room_service.RoomService,
+	cs *client_service.ClientService,
+	cfg *core_config.Config,
+	mng *core_command.Manager,
+) *Server {
 	srv := &Server{
 		roomService:   rs,
 		clientService: cs,
-		Manager:       core_command.NewManager(),
+		Manager:       mng,
 		config:        cfg,
 		log:           logger,
 	}
-	srv.registerCommands()
 	return srv
-}
-
-func (s *Server) registerCommands() {
-	s.Manager.Register([]core_command.CommandHandler{
-		{
-			Name:        "/join",
-			Description: "Подключение к комнате",
-			Usage:       "/join <room_name>",
-			MinArgs:     1,
-			Handler: func(client *core_domain.Client, args []string) error {
-				if args[0] == "register" {
-					return errors.New("already registered. Use /join to join another room")
-				}
-				if client.RoomID == s.roomService.RegisterRoomID {
-					return errors.New("please register first using /reg <nickname>")
-				}
-				return s.roomService.JoinRoom(context.Background(), client, args[0])
-			},
-		},
-		{
-			Name:        "/all_info",
-			Description: "Информация о сервере: комнаты и пользователи в ней",
-			Usage:       "/all_info",
-			MinArgs:     0,
-			Handler: func(client *core_domain.Client, args []string) error {
-				text, err := s.roomService.GetAllInfo(client.ID)
-				if err != nil {
-					return fmt.Errorf("Error get all info about server: %v", err)
-				}
-				if err = s.SendMessageToUser(client, text); err != nil {
-					return fmt.Errorf("Error send message to user: %v", err)
-				}
-				return nil
-			},
-		},
-		{
-			Name:        "/info",
-			Description: "Информация о канале: пользователи в нем",
-			Usage:       "/info",
-			MinArgs:     0,
-			Handler: func(client *core_domain.Client, args []string) error {
-				room, err := s.roomService.GetRoomByID(context.Background(), client.RoomID)
-				if err != nil {
-					return fmt.Errorf("Error get room by id: %v", err)
-				}
-				text, err := s.roomService.GetInfoAboutRoom(client.ID, room.Name)
-				if err != nil {
-					return fmt.Errorf("Error get info about room: %v", err)
-				}
-				if err = s.SendMessageToUser(client, text); err != nil {
-					return fmt.Errorf("Error send message to user: %v", err)
-				}
-				return nil
-			},
-		},
-		{
-			Name:        "/nick",
-			Description: "Сменить никнейм",
-			Usage:       "/nick <new_name>",
-			MinArgs:     1,
-			Handler: func(client *core_domain.Client, args []string) error {
-				if client.RoomID == s.roomService.RegisterRoomID {
-					return errors.New("registration required")
-				}
-				return s.clientService.ChangeNick(context.Background(), client, args[0])
-			},
-		},
-		{
-			Name:        "/leave",
-			Description: "Покинуть текущую команту",
-			Usage:       "/leave",
-			MinArgs:     0,
-			Handler: func(client *core_domain.Client, args []string) error {
-				return s.roomService.LeaveRoom(context.Background(), client)
-			},
-		},
-		{
-			Name:        "/msg",
-			Description: "Отправить личное сообщение пользователю",
-			Usage:       "/msg <user_name> <text>",
-			MinArgs:     2,
-			Handler: func(client *core_domain.Client, args []string) error {
-				if client.RoomID == s.roomService.RegisterRoomID {
-					return errors.New("registration required")
-				}
-				message := core_domain.PrivateMessage{
-					SenderName:    client.Name,
-					RecipientName: args[0],
-					Text:          args[1],
-				}
-				return s.clientService.SendPrivateMessage(message, client)
-			},
-		},
-		{
-			Name:        "/reg",
-			Description: "Зарегистрировать ник",
-			Usage:       "/reg <nickname>",
-			MinArgs:     1,
-			Handler: func(client *core_domain.Client, args []string) error {
-				newName := args[0]
-				if err := s.clientService.ChangeNick(context.Background(), client, newName); err != nil {
-					return err
-				}
-				return s.roomService.JoinRoom(context.Background(), client, "general")
-			},
-		},
-	})
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -153,7 +51,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error listening: %w", err)
 	}
-	s.log.Info("Server started", zap.String("port", s.config.ServerPort))
+	s.log.Info("TCP server started", zap.String("port", s.config.ServerPort))
 
 	errCh := make(chan error, 1)
 	done := make(chan struct{})
@@ -171,21 +69,17 @@ func (s *Server) Start(ctx context.Context) error {
 			default:
 			}
 
-			var conn net.Conn
-			conn, err = s.listener.Accept()
+			conn, err := s.listener.Accept()
 			if err != nil {
 				if errors.Is(err, net.ErrClosed) {
 					return
 				}
-
 				select {
 				case <-ctx.Done():
 					return
 				default:
 				}
-
 				s.log.Error("Error accepting connection", zap.Error(err))
-
 				select {
 				case errCh <- fmt.Errorf("accept error: %w", err):
 				default:
@@ -194,7 +88,6 @@ func (s *Server) Start(ctx context.Context) error {
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
-
 			go s.RegisterInServer(ctx, conn)
 		}
 	}()
@@ -232,18 +125,17 @@ func (s *Server) gracefulShutdown() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.log.Warn("Остановка сервера...")
 	if s.listener != nil {
-		s.log.Debug("Закрываем listener")
+		s.log.Debug("Closed listener")
 		if err := s.listener.Close(); err != nil {
 			if !errors.Is(err, net.ErrClosed) {
-				s.log.Warn("Ошибка закрытия listener", zap.Error(err))
+				s.log.Warn("Error close listener", zap.Error(err))
 			}
 		}
 	}
 
 	clients := s.clientService.GetAllClients()
-	s.log.Debug("Отправка уведомления клиентам", zap.Int("count", s.clientService.Count()))
+	s.log.Debug("Send message clients", zap.Int("count", s.clientService.Count()))
 	for _, client := range clients {
 		if client.Conn != nil {
 			fmt.Fprintf(client.Conn, "Сервер останавливается...\n")
@@ -253,7 +145,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	for _, client := range clients {
 		if client.Conn != nil {
 			client.Conn.Close()
-			s.log.Debug("Закрыто соединение клиента", zap.Int("client", client.ID))
+			s.log.Debug("Client connection closed", zap.Int("client", client.ID))
 		}
 	}
 
@@ -265,10 +157,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-done:
-		s.log.Info("Все горутины завершены")
+		s.log.Info("All goroutines stopped")
 		return nil
 	case <-ctx.Done():
-		s.log.Warn("Таймаут остановки сервера, принудительное завершение")
+		s.log.Warn("Server shutdown timeout, forced termination")
 		s.mtx.Lock()
 		for _, client := range clients {
 			if client.Conn != nil {
@@ -278,14 +170,4 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.mtx.Unlock()
 		return ctx.Err()
 	}
-}
-
-func (s *Server) SendMessageToUser(client *core_domain.Client, text string) error {
-	if _, err := fmt.Fprintln(client.Conn, text); err != nil {
-		s.log.Warn("Ошибка отправки сообщения",
-			zap.Int("client_id", client.ID),
-			zap.Error(err))
-		return fmt.Errorf("Ошибка отправки сообщения: %v", err)
-	}
-	return nil
 }

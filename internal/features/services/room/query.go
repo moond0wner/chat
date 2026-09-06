@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
+
+	"go.uber.org/zap"
 )
 
 func (rs *RoomService) GetRoomByName(ctx context.Context, name string) (*core_domain.Room, error) {
@@ -21,7 +23,8 @@ func (rs *RoomService) GetRoomByName(ctx context.Context, name string) (*core_do
 
 	id, err := rs.historyRepository.GetIDRoomByName(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("Error get room from db: %v", err)
+		rs.log.Warn("Error get room from DB", zap.String("room_name", name), zap.Error(err))
+		return nil, fmt.Errorf("Error get room from DB: %v", err)
 	}
 
 	rs.mtx.Lock()
@@ -44,6 +47,6 @@ func (rs *RoomService) GetRoomByID(ctx context.Context, id int) (*core_domain.Ro
 	if ok {
 		return room, nil
 	} else {
-		return nil, errors.New("Room not found")
+		return nil, errors.New("Комната не найдена")
 	}
 }

@@ -3,10 +3,10 @@ package core_pgx_pool
 import (
 	"errors"
 	"fmt"
-	core_postgres_pool "tcp_srv/internal/core/repository/postgres/pool"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	core_postgres_pool "github.com/moond0wner/chat/internal/core/repository/postgres/pool"
 )
 
 type pgxRows struct {

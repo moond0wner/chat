@@ -4,10 +4,10 @@ export
 export PROJECT_ROOT=${shell pwd}
 
 env-up: 
-	@docker compose up -d postgres redis
+	@docker compose up -d postgres 
 
 env-down: 
-	@docker compose down postgres redis
+	@docker compose down postgres 
 
 env-cleanup: 
 	@read -p "Очистить все volume файлы окружения? Опасность утери данных. [y/N]: " ans; \
@@ -74,18 +74,26 @@ logs-cleanup:
 ps:
 	@docker compose ps
 
-tcp-deploy:
-	@docker compose up -d --build tcp
+app-deploy:
+	@docker compose up -d --build chat
 
-tcp-undeploy:
-	@docker compose down tcp
+app-undeploy:
+	@docker compose down chat
 
-run:
+app-run:
 	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
 	export POSTGRES_HOST=localhost && \
 	sudo chmod -R 777 ${PROJECT_ROOT}/out/pgdata && \
 	go mod tidy && \
-	go run cmd/tcp/main.go
+	go run cmd/initialization.go cmd/main.go
+
+web-deploy: 
+	@docker compose up -d --build web-server
+
+web-undeploy: 
+	@docker compose down web-server
 
 go-lint:
 	@~/go/bin/golangci-lint run --config=.golangci.yml ./...
+
+

@@ -3,7 +3,9 @@ package room_service
 import (
 	"context"
 	"fmt"
-	core_domain "tcp_srv/internal/core/domain"
+	core_domain "github.com/moond0wner/chat/internal/core/domain"
+
+	"go.uber.org/zap"
 )
 
 func (rs *RoomService) removeClientFromRoom(client *core_domain.Client) (*core_domain.Room, []*core_domain.Client, bool) {
@@ -38,6 +40,11 @@ func (rs *RoomService) addClientToRoom(ctx context.Context, client *core_domain.
 	if !ok {
 		room = core_domain.NewRoom(roomName)
 		if err := rs.historyRepository.SaveRoom(ctx, room); err != nil {
+			rs.log.Warn("Error save room in DB",
+				zap.Int("room_id", room.ID),
+				zap.String("room_name", room.Name),
+				zap.Error(err),
+			)
 			return nil, nil, fmt.Errorf("save room: %w", err)
 		}
 		rs.rooms[room.ID] = room

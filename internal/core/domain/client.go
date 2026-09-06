@@ -1,14 +1,15 @@
 package core_domain
 
 import (
-	"net"
 	"time"
+
+	core_transport "github.com/moond0wner/chat/internal/core/transport"
 )
 
 type Client struct {
 	ID        int
 	Name      string
-	Conn      net.Conn
+	Conn      core_transport.Conn
 	RoomID    int
 	CreatedAt time.Time
 }

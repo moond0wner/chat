@@ -1,8 +1,9 @@
-module tcp_srv
+module github.com/moond0wner/chat
 
 go 1.26.5
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	go.uber.org/zap v1.28.0

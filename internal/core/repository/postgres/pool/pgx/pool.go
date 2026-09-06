@@ -3,10 +3,10 @@ package core_pgx_pool
 import (
 	"context"
 	"fmt"
-	core_postgres_pool "tcp_srv/internal/core/repository/postgres/pool"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	core_postgres_pool "github.com/moond0wner/chat/internal/core/repository/postgres/pool"
 )
 
 type Pool struct {
